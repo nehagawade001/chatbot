@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to right, #00c6ff, #0072ff);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        #chatbot {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 300px;
+            max-width: 90%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            display: none; /* Start hidden */
+        }
+        #chatbot-header {
+            background: #0072ff;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+        }
+        #chatbot-body {
+            padding: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #user-input {
+            width: calc(100% - 20px);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+        #toggle-chatbot {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #0072ff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="chatbot">
+        <div id="chatbot-header">Chatbot</div>
+        <div id="chatbot-body">
+            <div id="messages"></div>
+        </div>
+        <input type="text" id="user-input" placeholder="Type your question..." />
+    </div>
+
+    <button id="toggle-chatbot">
+        💬
+    </button>
+
+    <script>
+        const chatbot = document.getElementById('chatbot');
+        const toggleChatbot = document.getElementById('toggle-chatbot');
+        const messages = document.getElementById('messages');
+        const userInput = document.getElementById('user-input');
+
+        toggleChatbot.addEventListener('click', () => {
+            chatbot.style.display = chatbot.style.display === 'none' || chatbot.style.display === '' ? 'block' : 'none';
+        });
+
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const question = userInput.value;
+                if (question.trim()) {
+                    messages.innerHTML += `<div><strong>You:</strong> ${question}</div>`;
+                    userInput.value = '';
+
+                    fetch('http://localhost:8501/api/query', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ question: question })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        messages.innerHTML += `<div><strong>Bot:</strong> ${data.answer}</div>`;
+                        messages.scrollTop = messages.scrollHeight;
+                    })
+                    .catch(error => {
+                        messages.innerHTML += `<div><strong>Error:</strong> ${error.message}</div>`;
+                    });
+                }
+            }
+        });
+    </script>
+
+</body>
+</html>

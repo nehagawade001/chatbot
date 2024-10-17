@@ -1,0 +1,8 @@
+streamlit
+langchain
+langchain-google-genai
+langchain-community
+python-dotenv
+mysql-connector-python
+fastapi
+uvicorn
