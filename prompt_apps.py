@@ -11,7 +11,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import threading
+import faiss
+import numpy as np
+from sentence_transformers import SentenceTransformer
 from langchain_core.prompts import PromptTemplate
+import mysql.connector
 
 load_dotenv()
 
@@ -28,6 +32,38 @@ db_uri = f"mysql+mysqlconnector://{user}:{encoded_password}@{host}:{port}/{datab
 
 # Initialize SQLDatabase
 db = SQLDatabase.from_uri(db_uri)
+
+# Initialize SentenceTransformer model
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Fetch product data from SQL
+def fetch_product_data():
+    query = "SELECT * FROM products"
+    connection = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
+    cursor = connection.cursor(dictionary=True)
+    cursor.execute(query)
+    result = cursor.fetchall()
+    cursor.close()
+    connection.close()
+    return result
+
+# Store embeddings in FAISS
+def store_embeddings_in_faiss(products):
+    texts = []
+    ids = []
+    for product in products:
+        product_id = str(product['product_id'])
+        product_text = f"{product['product_name']} {product['product_description']}  {product['product_category']} {product['product_price']} {product['created_at']}"
+        texts.append(product_text)
+        ids.append(product_id)
+
+    embeddings_list = model.encode(texts)
+    embeddings_array = np.array(embeddings_list).astype('float32')
+
+    index = faiss.IndexFlatL2(embeddings_array.shape[1])
+    index.add(embeddings_array)
+
+    return index, ids
 
 # Initialize LLM
 try:
@@ -53,8 +89,12 @@ def scroll_to_bottom():
     components.html(
         """
         <script>
-            const chatBox = document.querySelector('.stChatMessage');  // Adjust selector as needed
-            chatBox.scrollTop = chatBox.scrollHeight;
+            const chatContainer = document.querySelector('.st-emotion-cache-keje6w');
+            if (chatContainer) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            } else {
+                alert("Chat container not found!");
+            }
         </script>
         """,
         height=0,
@@ -77,11 +117,11 @@ def execute_query(question):
 
         # Clean up the SQL query
         cleaned_query = clean_sql_query(sql_query)
-        
+
         # Print the SQL query for debugging
         st.write("Generated SQL Query:")
         st.code(cleaned_query)
-        
+
         # Execute the query
         result = db.run(cleaned_query)
 
@@ -138,6 +178,11 @@ threading.Thread(target=run_fastapi, daemon=True).start()
 st.set_page_config(layout="wide")
 st.title("My eCommerce Store")
 
+# Fetch product data and store embeddings if not already done
+if 'index' not in st.session_state:
+    products = fetch_product_data()
+    st.session_state.index, st.session_state.ids = store_embeddings_in_faiss(products)
+
 # Create two columns: one for products and one for chat
 col1, col2 = st.columns([1, 1])  # Adjust ratios as needed
 
@@ -164,8 +209,8 @@ with col1:
                         st.success(f"{product['name']} added to cart!")
 
 
+
 with col2:
-    # Chatbot section
     USER = "user"
     ASSISTANT = "ai"
     MESSAGES = "messages"
@@ -185,9 +230,6 @@ with col2:
         st.session_state[MESSAGES].append(Message(actor=USER, payload=prompt))
         st.chat_message(USER).write(prompt)
 
-        # Call the scroll function
-        scroll_to_bottom()
-
         # Send request to FastAPI for a response
         try:
             response = requests.post('http://localhost:8000/api/query', json={"question": prompt})
@@ -202,6 +244,9 @@ with col2:
         except Exception as e:
             st.session_state[MESSAGES].append(Message(actor=ASSISTANT, payload=f"Error: {str(e)}"))
             st.chat_message(ASSISTANT).write(f"Error: {str(e)}")
+
+    # Call the scroll function after adding messages
+    # scroll_to_bottom()
 
 # Add CSS to fix the input field at the bottom aligned with the chat messages
 st.markdown(
