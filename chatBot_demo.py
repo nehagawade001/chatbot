@@ -342,7 +342,7 @@ st.markdown(
     }
 
     .stColumn:last-child {
-        height: 400px;
+        height: 360px;
         overflow-y: scroll;
     }
     .stChatInput {
