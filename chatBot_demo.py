@@ -266,10 +266,16 @@ with col2:
     if MESSAGES not in st.session_state:
         st.session_state[MESSAGES] = [{"actor": ASSISTANT, "payload": "Hi! How can I help you?"}]
 
+    # Add a unique ID and class to the chat container
+    st.markdown('<div id="chat-container" class="chat-container">', unsafe_allow_html=True)
+
     # Display chat messages
     for msg in st.session_state[MESSAGES]:
         with st.chat_message(msg["actor"]):
             st.markdown(msg["payload"], unsafe_allow_html=True)
+
+    # Close the chat container div
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # User input at the bottom
     prompt: str = st.chat_input("Enter your question here...")
@@ -292,6 +298,27 @@ with col2:
                 # Display the answer
                 with st.chat_message(ASSISTANT):
                     st.markdown(answer, unsafe_allow_html=True)
+                    
+                # Scroll to the bottom after adding the new message
+                st.components.v1.html(
+                    """
+                    <script>
+                     console.log("scrollToBottom function called");
+                    function scrollToBottom() {
+                        console.log("scrollToBottom function called");
+                        const matches = parent.document.querySelectorAll("[data-testid='stChatMessage']");
+                        var chatMessages = document.getElementsByClassName('stChatMessage');
+                        console.log("matches",matches,matches.length);
+                        if (matches.length > 0) {
+                            var lastMessage = matches[matches.length - 1];
+                            lastMessage.scrollIntoView({ behavior: 'smooth' });
+                        }
+                    }
+                    // Call the function to scroll to the bottom
+                    scrollToBottom();
+                    </script>
+                    """
+                )
             else:
                 st.session_state[MESSAGES].append({"actor": ASSISTANT, "payload": "Error communicating with the server."})
                 st.chat_message(ASSISTANT).write("Error communicating with the server.")
@@ -305,6 +332,18 @@ st.markdown(
     <style>
     .streamlit-expanderHeader {
         display: none;
+    }
+    .stMain {
+        overflow: hidden;
+    }
+    .stMainBlockContainer {
+        # padding: 3rem 1rem 10rem; /* Adjust the padding value as needed */
+        position: fixed;
+    }
+
+    .stColumn:last-child {
+        height: 400px;
+        overflow-y: scroll;
     }
     .stChatInput {
         position: fixed;
