@@ -152,7 +152,7 @@ def execute_query(query):
             product_info = {
                 "product_name": row["product_name"],
                 "product_description": row.get("product_description", ""),
-                "product_price": row.get("product_price", "N/A"),
+                "product_price": f"¥{float(row.get('product_price', 0.0)):.2f}" if row.get('product_price') is not None else "N/A",
               #  ": row.get(", "#"),
                 "discount_percent": row.get("discount_percent", 0),
             }
@@ -231,10 +231,10 @@ with col1:
     st.subheader("Products")
 
     products = [
-        {"name": "Smart Watch", "price": "$190.99", "image": "./static/images/smart_watch.jpg"},
-        {"name": "Samsung Smart Phone ", "price": "$290.99", "image": "./static/images/samsung_smart_phone_04.jpg"},
-        {"name": "Smart Phone", "price": "$170.99", "image": "./static/images/phone.jpg"},
-        {"name": "Laptop", "price": "$200.99", "image": "./static/images/laptop.jpg"},
+        {"name": "Smart Watch", "price": "¥190.99", "image": "./static/images/smart_watch.jpg"},
+        {"name": "Samsung Smart Phone ", "price": "¥290.99", "image": "./static/images/samsung_smart_phone_04.jpg"},
+        {"name": "Smart Phone", "price": "¥170.99", "image": "./static/images/phone.jpg"},
+        {"name": "Laptop", "price": "¥200.99", "image": "./static/images/laptop.jpg"},
     ]
 
     # Create two columns for displaying products side by side
