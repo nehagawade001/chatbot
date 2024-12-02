@@ -26,7 +26,7 @@ load_dotenv()
 
 # Database connection parameters
 user = "root"
-password = "root@123456"
+password = "Sensegu@01"
 host = "localhost"
 port = 3306
 database = "store"
@@ -225,7 +225,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 # Streamlit UI for product display and chat
-col1, col2 = st.columns([1, 1])  # Adjust ratios as needed
+col1, col2 = st.columns([3, 1])  # Adjust ratios as needed
 
 with col1:
     st.subheader("Products")
@@ -347,21 +347,29 @@ st.markdown(
     }
     .stChatInput {
         position: fixed;
-        bottom: 20px; /* Distance from the bottom */
-        left: 72%; /* Center horizontally */
-        transform: translateX(-50%); /* Shift left by half its width */
-       
-        background-color: white; /* Adjust background color if needed */
-        width: 80%; /* Set a width relative to the screen */
-        max-width: 600px; /* Maximum width for larger screens */
-        border: 2px solid green; /* Green border */
-        box-sizing: border-box; /* Include padding and border in the element's width and height */
+        bottom: 20px;  /* Distance from the bottom */
+        right: 10px;   /* Distance from the right */
+        height: 50px;  /* Smaller height */
+        font-size: 12px;  /* Smaller font size */
+        width: 25%;
+        max-width: 400px;
+        border: 2px solid green;  /* Green border */
+        padding: 5px 10px;  /* Reduced padding */
+        box-sizing: border-box;
+        background-color: transparent;
+    }
+    
+     /* Remove the red border that can appear due to validation */
+    .stChatInput:invalid {
+        border: 2px solid green
     }
 
     /* Prevent hover border change */
     .stChatInput:hover {
         border: 2px solid green; /* Prevent hover border change */
+        box-sizing: border-box;
     }
+    
     .st-ah {
         width: 596px !important;
     }
