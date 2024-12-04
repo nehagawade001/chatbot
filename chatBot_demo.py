@@ -26,7 +26,7 @@ load_dotenv()
 
 # Database connection parameters
 user = "root"
-password = "Sensegu@01"
+password = "root@123456"
 host = "localhost"
 port = 3306
 database = "store"
@@ -76,21 +76,42 @@ SQL Query: SELECT product_name, product_description, product_price, FROM product
 Question: Show me the products under the 'Smartphone' product type.
 SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_type = 'Smartphone' LIMIT 5;
 
+Question: Do you sell pet food?
+SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_category LIKE %Pet Food% LIMIT 5;
+
+
+Question: 300円以下のジャケットが必要です
+SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_type LIKE %Jacket% LIMIT 5;
+
 Question: {question}
 SQL Query:  # Only return the SQL query, with no extra explanations or formatting
 """
 
 
 # Define the PromptTemplate for answering
+# answer_prompt = PromptTemplate.from_template(
+#     """Given the following user question, SQL query, and query result, provide a human-readable answer:
+
+# Question: {question}
+# SQL Query: {query}
+# SQL Result: {result}
+# Answer: """
+# )
+detected_language = "ja"  # Example: Japanese
 answer_prompt = PromptTemplate.from_template(
-    """Given the following user question, SQL query, and query result, provide a human-readable answer:
+    f"""Given the following user question, SQL query, and query result, provide a human-readable answer in {detected_language} in the form of a list of bullet points.
 
-Question: {question}
-SQL Query: {query}
-SQL Result: {result}
-Answer: """
+Question: {{question}}
+SQL Query: {{query}}
+SQL Result: {{result}}
+
+Your response should be formatted as follows:
+- Point 1
+- Point 2
+- Point 3
+
+Make sure the response starts directly with the bullet points, without any additional labels like "Answer:" or headers."""
 )
-
 
 # Define the PromptTemplate for generating SQL queries based on user questions
 prompt_template = PromptTemplate(
@@ -215,7 +236,8 @@ def run_fastapi():
 threading.Thread(target=run_fastapi, daemon=True).start()
 
 st.set_page_config(layout="wide")
-st.title("Cainz Store")
+st.image("./static/images/logo.png", width=150)
+#st.title("Cainz Store")
 
 # Add Font Awesome CDN
 st.markdown(
@@ -357,6 +379,10 @@ st.markdown(
         padding: 5px 10px;  /* Reduced padding */
         box-sizing: border-box;
         background-color: transparent;
+        overflow-y: auto;
+        min-height: 50px; 
+        max-height: 150px; 
+        resize: vertical;
     }
     
      /* Remove the red border that can appear due to validation */
@@ -369,10 +395,7 @@ st.markdown(
         border: 2px solid green; /* Prevent hover border change */
         box-sizing: border-box;
     }
-    
-    .st-ah {
-        width: 596px !important;
-    }
+
     </style>
     """,
     unsafe_allow_html=True
