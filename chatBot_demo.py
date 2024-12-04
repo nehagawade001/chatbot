@@ -253,8 +253,8 @@ with col1:
     st.subheader("Products")
 
     products = [
-        {"name": "Smart Watch", "price": "¥190.99", "image": "./static/images/smart_watch.jpg"},
-        {"name": "Samsung Smart Phone ", "price": "¥290.99", "image": "./static/images/samsung_smart_phone_04.jpg"},
+        {"name": "Insulated Sheet for Window Glass", "price": "¥190.99", "image": "./static/images/window.jpg"},
+        {"name": "Gift Pack ", "price": "¥290.99", "image": "./static/images/gift.jpg"},
         {"name": "Smart Phone", "price": "¥170.99", "image": "./static/images/phone.jpg"},
         {"name": "Laptop", "price": "¥200.99", "image": "./static/images/laptop.jpg"},
     ]
