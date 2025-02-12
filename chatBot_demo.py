@@ -26,7 +26,7 @@ load_dotenv()
 
 # Database connection parameters
 user = "root"
-password = "root@123456"
+password = "root"
 host = "localhost"
 port = 3306
 database = "store"
@@ -97,9 +97,9 @@ SQL Query:  # Only return the SQL query, with no extra explanations or formattin
 # SQL Result: {result}
 # Answer: """
 # )
-detected_language = "ja"  # Example: Japanese
+detected_language = "en"  # Example: Japanese in {detected_language}
 answer_prompt = PromptTemplate.from_template(
-    f"""Given the following user question, SQL query, and query result, provide a human-readable answer in {detected_language} in the form of a list of bullet points.
+    f"""Given the following user question, SQL query, and query result, provide a human-readable answer  in the form of a list of bullet points.
 
 Question: {{question}}
 SQL Query: {{query}}
