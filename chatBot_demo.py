@@ -26,7 +26,7 @@ load_dotenv()
 
 # Database connection parameters
 user = "root"
-password = "root@123456"
+password = "root"
 host = "localhost"
 port = 3306
 database = "store"
@@ -51,37 +51,39 @@ except Exception as e:
 # Prepare the few-shot prompt examples for dynamic SQL generation
 # Modify the prompt to strictly generate only SQL
 # Prepare the few-shot prompt examples for dynamic SQL generation
-few_shot_prompt = """Given the following user question, generate a clean and executable SQL query to fetch the relevant product data from the database. Always ensure that the product name (or a similar attribute) is part of the query, even if the question doesn't directly specify it.
+few_shot_prompt = """Given the following user question, generate a clean and executable SQL query to fetch the relevant product data from the database. Always ensure that the product name (or a similar attribute) is part of the query, even if the question doesn't directly specify it. If the question asks for order information, include the relevant details from the orders table.
 
 Examples:
 
 Question: What is the price of the Logitech Z623 speakers?
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_name LIKE '%Logitech Z623%' LIMIT 5;
+SQL Query: SELECT product_name, product_description, product_price FROM products WHERE product_name LIKE '%Logitech Z623%' LIMIT 5;
 
 Question: What is the discount on the Dell XPS 13 laptop?
 SQL Query: SELECT product_name, product_description, product_price, product_quantity, discount_percent FROM products WHERE product_name LIKE '%Dell XPS 13%' LIMIT 5;
 
 Question: Show me sony headphone
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_name LIKE '%Sony%' and product_type = '%Headphones%' LIMIT 5;
+SQL Query: SELECT product_name, product_description, product_price FROM products WHERE product_name LIKE '%Sony%' and product_type = '%Headphones%' LIMIT 5;
 
 Question: Show me audio devices
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE (product_type = '%audio%' OR product_category = '%audio%') LIMIT 5;
+SQL Query: SELECT product_name, product_description, product_price FROM products WHERE (product_type = '%audio%' OR product_category = '%audio%') LIMIT 5;
 
 Question: Get the products that are on sale.
 SQL Query: SELECT product_name, product_description, product_price, product_quantity, discount_percent FROM products WHERE discount_percent > 0 AND discount_percent IS NOT NULL LIMIT 5;
 
 Question: Show me the products with no discount.
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE discount_percent = 0 OR discount_percent IS NULL LIMIT 5;
+SQL Query: SELECT product_name, product_description, product_price FROM products WHERE discount_percent = 0 OR discount_percent IS NULL LIMIT 5;
 
 Question: Show me the products under the 'Smartphone' product type.
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_type = 'Smartphone' LIMIT 5;
+SQL Query: SELECT product_name, product_description, product_price FROM products WHERE product_type = 'Smartphone' LIMIT 5;
 
 Question: Do you sell pet food?
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_category LIKE %Pet Food% LIMIT 5;
+SQL Query: SELECT product_name, product_description, product_price FROM products WHERE product_category LIKE '%Pet Food%' LIMIT 5;
 
+Question: Show me the order information for Logitech Z623 speakers
+SQL Query: SELECT p.product_name, o.order_id, o.order_status_name FROM products p JOIN orders o ON p.product_id = o.product_id WHERE p.product_name LIKE '%Logitech Z623%' LIMIT 5;
 
-Question: 300円以下のジャケットが必要です
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_type LIKE %Jacket% LIMIT 5;
+Question: What are the order details for Dell XPS 13 laptop?
+SQL Query: SELECT p.product_name, o.order_id, o.order_status_name FROM products p JOIN orders o ON p.product_id = o.product_id WHERE p.product_name LIKE '%Dell XPS 13%' LIMIT 5;
 
 Question: {question}
 SQL Query:  # Only return the SQL query, with no extra explanations or formatting
@@ -171,6 +173,7 @@ def execute_query(query):
         result_data = []
         for row in result:
             product_info = {
+                "order_status": row["order_status_name"],
                 "product_name": row["product_name"],
                 "product_description": row.get("product_description", ""),
                 "product_price": f"¥{float(row.get('product_price', 0.0)):.2f}" if row.get('product_price') is not None else "N/A",
