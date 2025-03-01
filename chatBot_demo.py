@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain.chains import LLMChain
-from langchain.llms import OpenAI
+from langchain_community.llms import OpenAI
 from langchain.prompts import PromptTemplate
 from langchain_community.utilities import SQLDatabase
 from langchain_google_genai import GoogleGenerativeAI
@@ -41,6 +41,9 @@ db = SQLDatabase.from_uri(db_uri)
 # Initialize SentenceTransformer model for embedding queries
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
+# List of Valid Columns
+VALID_COLUMNS = {"product_name", "product_description", "product_price", "product_type", "product_category", "image_url", "discount_percent", "product_quantity"}
+
 # Initialize LLM (GoogleGenerativeAI) for query generation
 try:
     llm = GoogleGenerativeAI(model="models/gemini-1.5-flash-001", google_api_key=os.getenv("GOOGLE_API_KEY"))
@@ -52,6 +55,15 @@ except Exception as e:
 # Modify the prompt to strictly generate only SQL
 # Prepare the few-shot prompt examples for dynamic SQL generation
 few_shot_prompt = """Given the following user question, generate a clean and executable SQL query to fetch the relevant product data from the database. Always ensure that the product name (or a similar attribute) is part of the query, even if the question doesn't directly specify it.
+Generate a valid SQL query based on the user question. Only use the following columns:
+- `product_name`
+- `product_description`
+- `product_price`
+- `product_type`
+- `product_category`
+- `image_url`
+ 
+Do NOT generate queries using unknown column names.
 
 Examples:
 
@@ -74,7 +86,7 @@ Question: Show me the products with no discount.
 SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE discount_percent = 0 OR discount_percent IS NULL LIMIT 5;
 
 Question: Show me the products under the 'Smartphone' product type.
-SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_type = 'Smartphone' LIMIT 5;
+SQL Query: SELECT product_name, product_description, product_price, image_url FROM products WHERE product_type = 'Smartphone' LIMIT 5;
 
 Question: Do you sell pet food?
 SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_category LIKE %Pet Food% LIMIT 5;
@@ -82,6 +94,27 @@ SQL Query: SELECT product_name, product_description, product_price, FROM product
 
 Question: 300円以下のジャケットが必要です
 SQL Query: SELECT product_name, product_description, product_price, FROM products WHERE product_type LIKE %Jacket% LIMIT 5;
+
+Question: Show me jacket for men.
+SQL Query: SELECT product_name, product_description, product_price,image_url FROM products WHERE product_type = '%jacket%' LIMIT 5;
+
+Question: Show me red sneakers.
+SQL Query: SELECT product_name, product_description, product_price,image_url FROM products WHERE product_type = '%sneakers%' LIMIT 5;
+
+Question: Show me samsung smartphones.
+SQL Query: SELECT product_name, product_description, product_price,image_url FROM products WHERE product_type = 'Smartphone' LIMIT 5;
+
+Question: Alchemist book.
+SQL Query: SELECT product_name, product_description, product_price,image_url FROM products WHERE product_name LIKE '%Alchemist%';
+
+Question: Image of smartphones.
+SQL Query: Select product_name,image_url FROM products WHERE product_type = 'Smartphone';
+
+Question: show me samsung S23.
+SQL Query: Select product_name,product_description,image_url FROM products WHERE product_type = 'Smartphone'and product_name LIKE '%Samsung%';
+
+
+
 
 Question: {question}
 SQL Query:  # Only return the SQL query, with no extra explanations or formatting
@@ -91,7 +124,7 @@ SQL Query:  # Only return the SQL query, with no extra explanations or formattin
 # Define the PromptTemplate for answering
 # answer_prompt = PromptTemplate.from_template(
 #     """Given the following user question, SQL query, and query result, provide a human-readable answer:
-
+# - Image: [Click here to view](image_url) (Include only if `image_url` exists)
 # Question: {question}
 # SQL Query: {query}
 # SQL Result: {result}
@@ -100,7 +133,8 @@ SQL Query:  # Only return the SQL query, with no extra explanations or formattin
 detected_language = "en"  # Example: Japanese in {detected_language}
 answer_prompt = PromptTemplate.from_template(
     f"""Given the following user question, SQL query, and query result, provide a human-readable answer  in the form of a list of bullet points.
-
+        Ensure the query strictly uses only these columns: `product_name`, `product_category`, `product_description`, `product_type`, `product_price`, `discount_percent`, `image_url`, `product_detail_url`, `product_store_name`,`product_quantity`. 
+        If the user question refers to attributes that do not exist in the database, return a query that fetches no results.
 Question: {{question}}
 SQL Query: {{query}}
 SQL Result: {{result}}
@@ -109,6 +143,7 @@ Your response should be formatted as follows:
 - Point 1
 - Point 2
 - Point 3
+
 
 Make sure the response starts directly with the bullet points, without any additional labels like "Answer:" or headers."""
 )
@@ -134,13 +169,32 @@ def fetch_product_data():
     connection.close()
     return result
 
-
 def clean_sql_query(query):
     # Remove leading and trailing triple backticks (```sql``` and ```)
     query = query.strip()  # First, strip any leading/trailing whitespace
-    query = re.sub(r'^```sql\s*', '', query)  # Remove leading ```sql if present
+    query = re.sub(r'^```sql\s*', '', query,flags=re.IGNORECASE)  # Remove leading ```sql if present
     query = re.sub(r'```$', '', query)  # Remove trailing ``` if present
     return query
+
+# Function to Extract Column Names from SQL Query
+def extract_columns_from_query(query):
+    """Extract column names from the SQL query."""
+    match = re.search(r"SELECT (.+?) FROM", query, re.IGNORECASE)
+    if match:
+        columns_part = match.group(1)
+        columns = [col.strip().split(" ")[0] for col in columns_part.split(",")]
+        return set(columns)
+    return set()
+ 
+# Function to Validate SQL Columns
+def validate_sql_columns(query):
+    """Checks if all columns in the query are valid."""
+    extracted_columns = extract_columns_from_query(query)
+    invalid_columns = extracted_columns - VALID_COLUMNS
+    if invalid_columns:
+        print(f"Invalid columns detected: {invalid_columns}")
+        return False
+    return True
 
 def execute_query(query):
     try:
@@ -154,6 +208,11 @@ def execute_query(query):
 
         # Ensure only one query is passed to execute
         cleaned_query = cleaned_query.strip()  # Remove any leading/trailing whitespaces
+
+        # Validate if query contains only allowed columns
+        if not validate_sql_columns(cleaned_query):
+            print("Query is validated")
+            return "Invalid query generated. Please try again."
 
         # Execute the query in the MySQL database
         connection = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
@@ -175,8 +234,13 @@ def execute_query(query):
                 "product_description": row.get("product_description", ""),
                 "product_price": f"¥{float(row.get('product_price', 0.0)):.2f}" if row.get('product_price') is not None else "N/A",
               #  ": row.get(", "#"),
+                "image_url": row.get("image_url", ""),  # Include image URL
                 "discount_percent": row.get("discount_percent", 0),
             }
+            
+            if not product_info["image_url"]:
+                product_info["image_url"]="NO image available"
+
             result_data.append(product_info)
 
         # Format the result data into a human-readable string
@@ -191,6 +255,31 @@ def execute_query(query):
         #         formatted_results += "<br>"  # Add this to separate each product
         # else:
         #     formatted_results = "No matching products found for the given query."
+
+        formatted_results = ""
+        # for item in result_data:
+        #     formatted_results += f"- **{item['product_name']}**: {item['product_description']}<br>"
+        #     formatted_results += f"- **Price**: {item['product_price']}<br>"
+            
+        #     # Include clickable image link if available
+        #     if item["image_url"]:
+        #         formatted_results += (
+        #             #  f'<a href="{product_page}" target="_blank">'
+        #              f'<img src="{item["image_url"]}" width="250"></a><br>' 
+        #             )
+        #     formatted_results += "<br>"
+
+        # for product in result_data:
+        #     image_status = product["image_url"] if product["image_url"] else "No image available"
+    
+        #     product_details = (
+        #     f"**{product['product_name']}**\n"
+        #     f"{product.get('product_description', 'No description available.')}\n"
+        #     f"**Price:** {product.get('product_price', 'N/A')}\n"
+        #     f"**Image:** {image_status}"
+        #     )
+    
+        # formatted_results += f"\n\n{product_details}"  # Append to final response
 
         # Generate the answer based on the SQL result
         prompt_input = {
@@ -318,8 +407,28 @@ with col2:
                 st.session_state[MESSAGES].append({"actor": ASSISTANT, "payload": answer})
     
                 # Display the answer
+                product_page="https://g.co/kgs/TJt6s1K"
                 with st.chat_message(ASSISTANT):
                     st.markdown(answer, unsafe_allow_html=True)
+                    if "image_url" in data["result"][0]:  # To check at least one product has an image
+                        for product in data["result"]:
+                            if product["image_url"]:
+                                image_html = f'<a href="{product_page}" target="_blank">' \
+                                             f'<img src="{product["image_url"]}" width="250"></a>'\
+                                            #  f'<p><b>{product["product_name"]}<b></p>'
+                                st.markdown(image_html, unsafe_allow_html=True)
+                            # else:
+                            #     st.markdown("<i>No image available</i>",unsafe_allow_html=True)
+                    # for product in data.get("result",[]):
+                    #     # st.markdown(f"**{product['product_name']}**") 
+                    #     # st.markdown(product['product_description'])
+                    #     # st.markdown(f"**Price:** {product['product_price']}")
+
+                        # if product.get("image_url"):
+                        #     st.image(product["image_url"],width=200)
+                        # else:
+                        #     st.write("No image available.")
+                    # st.markdown(answer, unsafe_allow_html=True)
                     
                 # Scroll to the bottom after adding the new message
                 st.components.v1.html(
