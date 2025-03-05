@@ -20,6 +20,9 @@ from langchain_core.prompts import PromptTemplate
 import validators
 import re
 
+import sqlparse
+from sqlparse.sql import IdentifierList, Identifier
+
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
@@ -51,19 +54,70 @@ except Exception as e:
     print(f"Error initializing LLM: {e}")
     llm = None
 
+# Function to fetch table schema dynamically
+ 
+def get_database_schema():
+    connection = mysql.connector.connect(user="root", password="root", host="localhost", database="store")
+    cursor = connection.cursor()
+ 
+    cursor.execute("SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'store'")
+    schema_info = cursor.fetchall()
+    
+    cursor.close()
+    connection.close()
+ 
+    # Organize schema into a dictionary
+    schema = {}
+    for table, column in schema_info:
+        if table not in schema:
+            schema[table] = []
+        schema[table].append(column)
+ 
+    return schema
+
+def format_schema_for_prompt(schema):
+    schema_text = "The database schema contains the following tables and columns:\n\n"
+    for table, columns in schema.items():
+        schema_text += f"Table `{table}`:\n"
+        for column in columns:
+            schema_text += f"- `{column}`\n"
+        schema_text += "\n"
+    schema_text += "Only use tables and columns that exist in the schema above. Do NOT make up column names."
+    print(schema_text)
+    return schema_text
+
+# Fetch schema once at startup
+database_schema = get_database_schema()
+schema_text=format_schema_for_prompt(database_schema)
+
+
+# Prepare the database schema string
+# schema_str = "\n".join([f"Table: {table}, Columns: {', '.join(columns)}" for table, columns in database_schema.items()])
+
+
 # Prepare the few-shot prompt examples for dynamic SQL generation
 # Modify the prompt to strictly generate only SQL
 # Prepare the few-shot prompt examples for dynamic SQL generation
+# - `product_name`
+# - `product_description`
+# - `product_price`
+# - `product_type`
+# - `product_category`
+# - `image_url`
+# - `order_status_name`
+# - `order_id`
 few_shot_prompt = """Given the following user question, generate a clean and executable SQL query to fetch the relevant product data from the database. Always ensure that the product name (or a similar attribute) is part of the query, even if the question doesn't directly specify it.
-Generate a valid SQL query based on the user question. Only use the following columns:
-- `product_name`
-- `product_description`
-- `product_price`
-- `product_type`
-- `product_category`
-- `image_url`
- 
+From the columns in the database schema generate a valid SQL query based on the user question.
+Generate a valid SQL query based on the user question. 
+
+Only use the table names and column names present in following: `schema_text`
+
+
 Do NOT generate queries using unknown column names.
+
+-Only use tables and column names that **exist in the database schema**.
+
+-Do **NOT** make up column names that do not exist.
 
 Examples:
 
@@ -113,13 +167,16 @@ SQL Query: Select product_name,image_url FROM products WHERE product_type = 'Sma
 Question: show me samsung S23.
 SQL Query: Select product_name,product_description,image_url FROM products WHERE product_type = 'Smartphone'and product_name LIKE '%Samsung%';
 
+Question: Show me the order information for Logitech Z623 speakers
+SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_name FROM products  JOIN orders ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Logitech Z623%' LIMIT 5;
 
+Question: What are the order details for Dell XPS 13 laptop?
+SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_name FROM products  JOIN orders  ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Dell XPS 13%' LIMIT 5;
 
 
 Question: {question}
 SQL Query:  # Only return the SQL query, with no extra explanations or formatting
 """
-
 
 # Define the PromptTemplate for answering
 # answer_prompt = PromptTemplate.from_template(
@@ -128,12 +185,12 @@ SQL Query:  # Only return the SQL query, with no extra explanations or formattin
 # Question: {question}
 # SQL Query: {query}
 # SQL Result: {result}
-# Answer: """
+# Answer: """ `product_name`, `product_category`, `product_description`, `product_type`, `product_price`, `discount_percent`, `image_url`, `product_detail_url`, `product_store_name`,`product_quantity`. 
 # )
 detected_language = "en"  # Example: Japanese in {detected_language}
 answer_prompt = PromptTemplate.from_template(
     f"""Given the following user question, SQL query, and query result, provide a human-readable answer  in the form of a list of bullet points.
-        Ensure the query strictly uses only these columns: `product_name`, `product_category`, `product_description`, `product_type`, `product_price`, `discount_percent`, `image_url`, `product_detail_url`, `product_store_name`,`product_quantity`. 
+        Ensure the query strictly uses only these column from these: {schema_text}
         If the user question refers to attributes that do not exist in the database, return a query that fetches no results.
 Question: {{question}}
 SQL Query: {{query}}
@@ -176,28 +233,89 @@ def clean_sql_query(query):
     query = re.sub(r'```$', '', query)  # Remove trailing ``` if present
     return query
 
-# Function to Extract Column Names from SQL Query
-def extract_columns_from_query(query):
-    """Extract column names from the SQL query."""
-    match = re.search(r"SELECT (.+?) FROM", query, re.IGNORECASE)
-    if match:
-        columns_part = match.group(1)
-        columns = [col.strip().split(" ")[0] for col in columns_part.split(",")]
-        return set(columns)
-    return set()
+# # Function to Extract Column Names from SQL Query
+# def extract_columns_from_query(query):
+#     """Extract column names from the SQL query."""
+#     match = re.search(r"SELECT (.+?) FROM", query, re.IGNORECASE)
+#     if match:
+#         columns_part = match.group(1)
+#         columns = [col.strip().split(" ")[0] for col in columns_part.split(",")]
+#         return set(columns)
+#     return set()
  
-# Function to Validate SQL Columns
-def validate_sql_columns(query):
-    """Checks if all columns in the query are valid."""
-    extracted_columns = extract_columns_from_query(query)
-    invalid_columns = extracted_columns - VALID_COLUMNS
-    if invalid_columns:
-        print(f"Invalid columns detected: {invalid_columns}")
-        return False
-    return True
+# # Function to Validate SQL Columns
+# def validate_sql_columns(query):
+#     """Checks if all columns in the query are valid."""
+#     extracted_columns = extract_columns_from_query(query)
+#     invalid_columns = extracted_columns - VALID_COLUMNS
+#     if invalid_columns:
+#         print(f"Invalid columns detected: {invalid_columns}")
+#         return False
+#     return True
+ 
+# # Function to fetch table schema dynamically
+# def get_database_schema():
+#     try:
+#         connection = mysql.connector.connect(
+#             user="root", password="root", host="localhost", port=3306, database="store"
+#         )
+#         cursor = connection.cursor(dictionary=True)
+ 
+#         query = """
+#         SELECT TABLE_NAME, COLUMN_NAME
+#         FROM INFORMATION_SCHEMA.COLUMNS
+#         WHERE TABLE_SCHEMA = 'store';
+#         """
+#         cursor.execute(query)
+#         schema_data = cursor.fetchall()
+ 
+#         cursor.close()
+#         connection.close()
+ 
+#         # Organize schema into a dictionary {table_name: [columns]}
+#         schema = {}
+#         for row in schema_data:
+#             table = row["TABLE_NAME"]
+#             column = row["COLUMN_NAME"]
+#             if table not in schema:
+#                 schema[table] = []
+#             schema[table].append(column)
+ 
+#         return schema
+ 
+#     except Exception as e:
+#         print(f"Error fetching database schema: {e}")
+#         return {}
+
+import re
+ 
+# # Fetch schema once at startup
+# database_schema = get_database_schema()
+
+def validate_sql_query(query):
+    """
+    Ensure that the SQL query only references existing columns in the database.
+    """
+    global database_schema
+
+    # Extract table and column names using regex
+    column_pattern = re.findall(r"[\w]+\.[\w]+", query)  # Matches 'table.column'
+    
+    for col in column_pattern:
+        table, column = col.split('.')
+        if table in database_schema:
+            if column not in database_schema[table]:
+                return False, f"Invalid column '{column}' in table '{table}'."
+        else:
+            return False, f"Invalid table '{table}'."
+ 
+    return True, None
+
 
 def execute_query(query):
     try:
+        # schema = get_database_schema()
+
         # Generate the SQL query using the LLM and the user's question
         result_query = chain.run(question=query)  # This gets the SQL query from the LLM
         print(f"Generated SQL Query: {result_query}")  # Log the generated query
@@ -210,9 +328,16 @@ def execute_query(query):
         cleaned_query = cleaned_query.strip()  # Remove any leading/trailing whitespaces
 
         # Validate if query contains only allowed columns
-        if not validate_sql_columns(cleaned_query):
-            print("Query is validated")
-            return "Invalid query generated. Please try again."
+        # if not validate_sql_columns(cleaned_query):
+        #     print("Query is validated")
+        #     return "Invalid query generated. Please try again."
+        # if not is_valid_query(cleaned_query, schema):
+        #     return cleaned_query,[],"Error: The query references non-existent columns. Please refine your question."
+
+        # Validate SQL query against database schema
+        is_valid, error_message = validate_sql_query(cleaned_query)
+        if not is_valid:
+            return f"Error: {error_message}", [], ""
 
         # Execute the query in the MySQL database
         connection = mysql.connector.connect(user=user, password=password, host=host, port=port, database=database)
@@ -226,6 +351,11 @@ def execute_query(query):
         cursor.close()
         connection.close()
 
+        # if not result:
+        #     no_result_message="No matching products were found."
+        #     print(no_result_message)
+        #     return cleaned_query,[], no_result_message
+
         # Prepare the result data to be used in the template
         result_data = []
         for row in result:
@@ -237,7 +367,11 @@ def execute_query(query):
                 "image_url": row.get("image_url", ""),  # Include image URL
                 "discount_percent": row.get("discount_percent", 0),
             }
-            
+
+            if "order_status_name" in row:
+                product_info["order_status"] = row["order_status_name"]
+            result_data.append(product_info)
+
             if not product_info["image_url"]:
                 product_info["image_url"]="NO image available"
 
@@ -410,13 +544,13 @@ with col2:
                 product_page="https://g.co/kgs/TJt6s1K"
                 with st.chat_message(ASSISTANT):
                     st.markdown(answer, unsafe_allow_html=True)
-                    if "image_url" in data["result"][0]:  # To check at least one product has an image
-                        for product in data["result"]:
-                            if product["image_url"]:
-                                image_html = f'<a href="{product_page}" target="_blank">' \
-                                             f'<img src="{product["image_url"]}" width="250"></a>'\
-                                            #  f'<p><b>{product["product_name"]}<b></p>'
-                                st.markdown(image_html, unsafe_allow_html=True)
+                    # if "image_url" in data["result"][0]:  # To check at least one product has an image
+                    #     for product in data["result"]:
+                    #         if product["image_url"]:
+                    #             image_html = f'<a href="{product_page}" target="_blank">' \
+                    #                          f'<img src="{product["image_url"]}" width="250"></a>'\
+                    #                         #  f'<p><b>{product["product_name"]}<b></p>'
+                    #             st.markdown(image_html, unsafe_allow_html=True)
                             # else:
                             #     st.markdown("<i>No image available</i>",unsafe_allow_html=True)
                     # for product in data.get("result",[]):
