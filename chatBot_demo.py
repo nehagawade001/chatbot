@@ -111,13 +111,12 @@ From the columns in the database schema generate a valid SQL query based on the 
 Generate a valid SQL query based on the user question. 
 
 Only use the table names and column names present in following: `schema_text`
-
-
+Rules:
+1. Only use the tables and columns listed above. Do **NOT** make up column names.
+2. If a required column is missing, **do not generate the query**.
+3. Always check if the condition column exists before using it in WHERE clause.
+4. If a column is related to a concept (e.g., "color" for a product), check if it exists first. If not, do not use it
 Do NOT generate queries using unknown column names.
-
--Only use tables and column names that **exist in the database schema**.
-
--Do **NOT** make up column names that do not exist.
 
 Examples:
 
@@ -173,6 +172,14 @@ SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_na
 Question: What are the order details for Dell XPS 13 laptop?
 SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_name FROM products  JOIN orders  ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Dell XPS 13%' LIMIT 5;
 
+Question: What is the rating of the iPhone 13?
+SQL Query: SELECT products.product_name, product_rating_review.product_rating FROM products JOIN product_rating_review ON products.product_id = product_rating_review.product_id WHERE products.product_name LIKE '%iPhone 13%' LIMIT 5;
+
+Question: What is the rating of the Anker PowerCore 10000?
+SQL Query: SELECT products.product_name, product_rating_review.product_rating FROM products JOIN product_rating_review ON products.product_id = product_rating_review.product_id WHERE products.product_name LIKE '%Anker PowerCore 10000%' LIMIT 5;
+
+Question: Show me reviews for Samsung Galaxy S21.
+SQL Query: SELECT products.product_name, product_rating_review.product_review FROM products JOIN product_rating_review ON products.product_id = product_rating_review.product_id WHERE products.product_name LIKE '%Samsung Galaxy S21%' LIMIT 5;
 
 Question: {question}
 SQL Query:  # Only return the SQL query, with no extra explanations or formatting
@@ -305,6 +312,7 @@ def validate_sql_query(query):
         table, column = col.split('.')
         if table in database_schema:
             if column not in database_schema[table]:
+                print(f"Invalid column '{column}' in table '{table}'")
                 return False, f"Invalid column '{column}' in table '{table}'."
         else:
             return False, f"Invalid table '{table}'."
@@ -366,6 +374,9 @@ def execute_query(query):
               #  ": row.get(", "#"),
                 "image_url": row.get("image_url", ""),  # Include image URL
                 "discount_percent": row.get("discount_percent", 0),
+                "product_rating": row.get("product_rating", ""),
+                "product_review": row.get("product_review", ""),
+
             }
 
             if "order_status_name" in row:
