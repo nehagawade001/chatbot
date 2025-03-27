@@ -118,6 +118,10 @@ Rules:
 4. If a column is related to a concept (e.g., "color" for a product), check if it exists first. If not, do not use it
 Do NOT generate queries using unknown column names.
 
+**Search order:**
+1. First, search for matching features in `product_description`.
+2. If no matching records are found, search for similar features in `product_review` and return the corresponding `product_name`.
+
 Examples:
 
 Question: What is the price of the Logitech Z623 speakers?
@@ -170,16 +174,23 @@ Question: Show me the order information for Logitech Z623 speakers
 SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_name FROM products  JOIN orders ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Logitech Z623%' LIMIT 5;
 
 Question: What are the order details for Dell XPS 13 laptop?
-SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_name FROM products  JOIN orders  ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Dell XPS 13%' LIMIT 5;
+SQL Query: SELECT products.product_name,orders.order_id, orders.order_status_name FROM products  JOIN orders  ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Dell XPS 13%' LIMIT 5;
 
 Question: What is the rating of the iPhone 13?
 SQL Query: SELECT products.product_name, product_rating_review.product_rating FROM products JOIN product_rating_review ON products.product_id = product_rating_review.product_id WHERE products.product_name LIKE '%iPhone 13%' LIMIT 5;
 
 Question: What is the rating of the Anker PowerCore 10000?
-SQL Query: SELECT products.product_name, product_rating_review.product_rating FROM products JOIN product_rating_review ON products.product_id = product_rating_review.product_id WHERE products.product_name LIKE '%Anker PowerCore 10000%' LIMIT 5;
+SQL Query: SELECT products.product_name, COALESCE(AVG(product_rating), 0) AS average_rating FROM products JOIN product_rating_review ON products.product_id = product_rating_review.product_id WHERE products.product_name LIKE '%Anker PowerCore 10000%' GROUP BY product_name LIMIT 5;
 
 Question: Show me reviews for Samsung Galaxy S21.
 SQL Query: SELECT products.product_name, product_rating_review.product_review FROM products JOIN product_rating_review ON products.product_id = product_rating_review.product_id WHERE products.product_name LIKE '%Samsung Galaxy S21%' LIMIT 5;
+
+Question: Spacious and durable sports bag. 
+SELECT DISTINCT product_name
+FROM products
+LEFT JOIN product_rating_review ON products.product_id = product_rating_review.product_id
+WHERE products.product_description LIKE '%Spacious and durable sports bag%' OR product_rating_review.product_review  LIKE '%Spacious and durable sports bag%'
+LIMIT 5;
 
 Question: {question}
 SQL Query:  # Only return the SQL query, with no extra explanations or formatting
@@ -374,6 +385,7 @@ def execute_query(query):
               #  ": row.get(", "#"),
                 "image_url": row.get("image_url", ""),  # Include image URL
                 "discount_percent": row.get("discount_percent", 0),
+                "order_id":row.get("order_id",0),
                 "product_rating": row.get("product_rating", ""),
                 "product_review": row.get("product_review", ""),
 
@@ -382,7 +394,10 @@ def execute_query(query):
             if "order_status_name" in row:
                 product_info["order_status"] = row["order_status_name"]
             result_data.append(product_info)
-
+            
+            if "average_rating" in row:
+                product_info["average_rating"] = row["average_rating"]
+                
             if not product_info["image_url"]:
                 product_info["image_url"]="NO image available"
 
