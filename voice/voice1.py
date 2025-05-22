@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain.chains import LLMChain
+from langchain_core.runnables import RunnableSequence
 from langchain_community.llms import OpenAI
 from langchain.prompts import PromptTemplate
 from langchain_community.utilities import SQLDatabase
@@ -23,14 +24,16 @@ import validators
 import langchain
 import re
 from langdetect import detect
-from googletrans import Translator
+# from googletrans import Translator
+from deep_translator import GoogleTranslator
 import langid
 from langdetect import detect, LangDetectException
+from pydantic import BaseModel
 
 # import ssl
 # ssl._create_default_https_context = ssl._create_unverified_context
 
-translator = Translator()
+# translator = Translator()
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -206,8 +209,11 @@ SQL Query: Select product_name,image_url FROM products WHERE product_type = 'Sma
 Question: show me samsung S23.
 SQL Query: Select product_name,product_description,image_url FROM products WHERE product_type = 'Smartphone'and product_name LIKE '%Samsung%';
  
-Question: Show me the order information for Logitech Z623 speakers
+Question: Show me the order status for Logitech Z623 speakers
 SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_name FROM products  JOIN orders ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Logitech Z623%' LIMIT 5;
+
+Question: What is the order status of the product with order id 1?
+SQL Query: SELECT products.product_name, orders.order_id, orders.order_status_name FROM products  JOIN orders ON products.product_id = orders.product_id WHERE orders.order_id =1 ;
  
 Question: What are the order details for Dell XPS 13 laptop?
 SQL Query: SELECT products.product_name,orders.order_id, orders.order_status_name FROM products  JOIN orders  ON products.product_id = orders.product_id WHERE products.product_name LIKE '%Dell XPS 13%' LIMIT 5;
@@ -296,8 +302,9 @@ def translate_text(text, src_lang):
     try:
         # If the language is not English, we will translate to English
         if src_lang != 'en':
-            translated = translator.translate(text, src=src_lang, dest='en')  # Translate to English
-            return translated.text
+            # translated = translator.translate(text, src=src_lang, dest='en')  # Translate to English
+            translated = GoogleTranslator(source=src_lang, target='en').translate(text)  # Translate to English
+            return translated
         # else:
         #     # If the language is already English, no need to translate
         #     return text
@@ -608,14 +615,7 @@ st.markdown(
         bottom: 25px;
     }
 
-    /*for adding scrolling to the first column*/
-    .st-emotion-cache-b95f0i {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 0%;
-    overflow-y: auto;
-    max-height: 100vh;
-    }
+    
 
 
         
@@ -625,7 +625,14 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
+# /*for adding scrolling to the first column*/
+#     .st-emotion-cache-b95f0i {
+#     display: flex;
+#     flex-direction: column;
+#     flex: 1 1 0%;
+#     overflow-y: auto;
+#     max-height: 100vh;
+#     }
 # Inject JavaScript for automatic scrolling
 st.components.v1.html(
     """
